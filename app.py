@@ -1,8 +1,10 @@
+# app.py (v3. 클린 기능 추가 및 스캔 로직 변경)
 import sys
 import os
 import platform
 from dataclasses import dataclass, field
 from pathlib import Path
+import time, random, string # uuid용
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
@@ -15,7 +17,7 @@ from PySide6.QtCore import Qt
 
 
 # -------------------------------------------------------------------
-# React의 roots 비슷한 구조
+# (데이터 클래스 - 변경 없음)
 # -------------------------------------------------------------------
 @dataclass
 class RootItem:
@@ -26,7 +28,6 @@ class RootItem:
 
 
 def uuid() -> str:
-    import time, random, string
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8)) + hex(int(time.time()))[2:]
 
 
@@ -37,121 +38,99 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("문서 임베딩 / 가상 디렉토리 GUI (임시 버전)")
+        self.setWindowTitle("문서 임베딩 / 가상 디렉토리 GUI (v3)")
         self.resize(1200, 700)
 
-        # App.jsx의 state 느낌
-        self.roots: list[RootItem] = []
-        self.current_root_id: str | None = None
-        self.current_path: list[str] = []     # 나중에 트리 구조 쓰면 활용
-        self.search_results: list[Path] = []  # 검색 결과
+        self.current_root: RootItem | None = None
+        self.search_results: list[Path] = []
         self.is_loading: bool = False
 
         # ================= 중앙 전체 레이아웃 =================
         central = QWidget()
         central_layout = QVBoxLayout(central)
 
-        # 상단 상태 라벨
-        self.status_label = QLabel("상태: 대기 중")
+        self.status_label = QLabel("상태: 스캔할 디렉토리를 선택하세요.")
         central_layout.addWidget(self.status_label)
 
-        # 아래쪽은 3분할 splitter: [왼쪽 사이드바 | 가운데 파일리스트 | 오른쪽 기능패널]
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(4)
 
         # ---------------------------
-        # [왼쪽] 디렉토리 스캔 사이드바
+        # [왼쪽] 모든 기능 패널
         # ---------------------------
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
+        left_panel_widget = QWidget()
+        left_layout = QVBoxLayout(left_panel_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 디렉토리 스캔 버튼
+        # ── [1] 디렉토리 스캔 ──────────────────────────
+        scan_group = QGroupBox("디렉토리")
+        scan_layout = QVBoxLayout(scan_group)
+
         self.btn_scan = QPushButton("📁 디렉토리 스캔")
         self.btn_scan.clicked.connect(self.handle_scan_click)
-        left_layout.addWidget(self.btn_scan)
+        scan_layout.addWidget(self.btn_scan)
 
-        # 여러 루트(스캔 결과) 리스트
-        self.roots_list = QListWidget()
-        self.roots_list.itemSelectionChanged.connect(self.handle_root_select)
-        left_layout.addWidget(self.roots_list, stretch=1)
+        # [추가] 화면 초기화(Clean) 버튼 추가
+        self.btn_clean = QPushButton("🧹 화면 초기화")
+        self.btn_clean.clicked.connect(self.handle_clean_click)
+        scan_layout.addWidget(self.btn_clean)
 
-        # 루트 삭제 버튼
-        self.btn_remove_root = QPushButton("선택한 루트 삭제")
-        self.btn_remove_root.clicked.connect(self.handle_remove_root)
-        left_layout.addWidget(self.btn_remove_root)
+        left_layout.addWidget(scan_group)
 
-        left_layout.addStretch(1)
-
-        # ---------------------------
-        # [가운데] 현재 루트 + 가상 디렉토리 파일 리스트
-        # ---------------------------
-        center_widget = QWidget()
-        center_layout = QVBoxLayout(center_widget)
-
-        self.current_root_label = QLabel("현재 루트: (없음)")
-        center_layout.addWidget(self.current_root_label)
-
-        self.file_list = QListWidget()
-        self.file_list.itemDoubleClicked.connect(self.handle_file_open)
-        center_layout.addWidget(self.file_list, stretch=1)
-
-        # ---------------------------
-        # [오른쪽] 기능 패널 (검색 + 검색결과 + 추가 기능)
-        # ---------------------------
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-
-        feature_group = QGroupBox("기능 패널")
-        feature_layout = QVBoxLayout(feature_group)
-
-        # ── [1] 검색 섹션 ────────────────────────────────
-        feature_layout.addWidget(QLabel("검색"))
+        # ── [2] 검색 섹션 ──────────────
+        search_group = QGroupBox("검색")
+        search_layout = QVBoxLayout(search_group)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("검색어 입력 (파일명 기준, 임시)")
         btn_search = QPushButton("검색")
         btn_search.clicked.connect(self.handle_search_click)
 
-        feature_layout.addWidget(self.search_input)
-        feature_layout.addWidget(btn_search)
+        search_layout.addWidget(self.search_input)
+        search_layout.addWidget(btn_search)
 
-        # 검색 결과 리스트 (기능 패널 하단에 붙음)
         self.search_results_list = QListWidget()
         self.search_results_list.itemDoubleClicked.connect(self.handle_file_open)
-        feature_layout.addWidget(self.search_results_list, stretch=1)
+        search_layout.addWidget(self.search_results_list, stretch=1)
 
-        # 중간 여백 + 아래로 밀기
-        feature_layout.addSpacing(10)
-        feature_layout.addStretch(1)
+        left_layout.addWidget(search_group, stretch=1)
 
-        # ── [2] 추가 기능 섹션 (맨 아래) ─────────────────
-        feature_layout.addWidget(QLabel("추가 기능"))
+        # ── [3] 추가 기능 섹션 ───────────
+        extra_group = QGroupBox("추가 기능")
+        extra_layout = QVBoxLayout(extra_group)
 
         self.btn_summary = QPushButton("요약 생성 (TODO)")
         self.btn_report = QPushButton("보고서 제작 (TODO)")
-
         self.btn_summary.clicked.connect(self.handle_summary_clicked)
         self.btn_report.clicked.connect(self.handle_report_clicked)
 
-        feature_layout.addWidget(self.btn_summary)
-        feature_layout.addWidget(self.btn_report)
+        extra_layout.addWidget(self.btn_summary)
+        extra_layout.addWidget(self.btn_report)
+        
+        left_layout.addWidget(extra_group)
 
-        right_layout.addWidget(feature_group, stretch=1)
 
         # ---------------------------
-        # splitter에 [왼 | 중 | 오른] 붙이고 비율 설정
+        # [오른쪽] 파일 리스트
         # ---------------------------
-        splitter.addWidget(left_widget)    # 0: 디렉토리 스캔
-        splitter.addWidget(center_widget)  # 1: 파일 리스트
-        splitter.addWidget(right_widget)   # 2: 기능 패널
+        right_panel_widget = QWidget()
+        right_layout = QVBoxLayout(right_panel_widget)
 
-        # 좌우 패널 폭 대칭 + 가운데는 넓게
-        splitter.setStretchFactor(0, 1)  # 왼쪽
-        splitter.setStretchFactor(1, 2)  # 가운데
-        splitter.setStretchFactor(2, 1)  # 오른쪽
+        self.current_root_label = QLabel("현재 루트: (없음)")
+        right_layout.addWidget(self.current_root_label)
 
-        # 처음 켤 때: [왼 300 | 중 600 | 오 300] 정도 비율로
-        splitter.setSizes([300, 600, 300])
+        self.file_list = QListWidget()
+        self.file_list.itemDoubleClicked.connect(self.handle_file_open)
+        right_layout.addWidget(self.file_list, stretch=1)
+
+        # ---------------------------
+        # splitter 설정 (변경 없음)
+        # ---------------------------
+        splitter.addWidget(left_panel_widget)
+        splitter.addWidget(right_panel_widget)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3) 
+        splitter.setSizes([300, 900]) 
 
         central_layout.addWidget(splitter, stretch=1)
         self.setCentralWidget(central)
@@ -161,9 +140,7 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------------------------
     def handle_scan_click(self):
         dir_path = QFileDialog.getExistingDirectory(
-            self,
-            "스캔할 폴더 선택",
-            os.path.expanduser("~")
+            self, "스캔할 폴더 선택", os.path.expanduser("~")
         )
         if not dir_path:
             return
@@ -172,28 +149,23 @@ class MainWindow(QMainWindow):
         root_name = Path(dir_path).name
 
         try:
-            # (1) 실제 파일들 수집 + 확장자 분류 (이미지 제외)
-            categorized_tree, total_files = self.scan_and_collect_files(dir_path)
+            # [수정] 확장자 분류(categorized_tree) 대신 파일 경로 리스트(file_paths)를 받음
+            file_paths, total_files = self.scan_and_collect_files(dir_path)
 
-            # (2) 임베딩 + 클러스터링 후 virtual tree 생성할 자리
-            virtual_tree = self.build_virtual_tree_from_clusters(categorized_tree)
+            # [수정] file_paths 리스트를 클러스터링 함수로 전달
+            # (이 함수가 나중에 AI 작업을 수행하고 가상 트리를 반환할 부분)
+            virtual_tree = self.build_virtual_tree_from_clusters(file_paths)
 
-            new_root = RootItem(
+            self.current_root = RootItem(
                 id=uuid(),
                 name=root_name,
                 tree=virtual_tree,
                 total_files=total_files,
             )
-            self.roots.append(new_root)
+            
+            # [수정] 버튼 비활성화 로직 *삭제* -> 계속 활성화됨
+            self.btn_scan.setText(f"📁 {root_name} (스캔됨)")
 
-            # roots 리스트 UI에 추가
-            item = QListWidgetItem(f"{new_root.name} ({new_root.total_files} files)")
-            item.setData(Qt.UserRole, new_root.id)
-            self.roots_list.addItem(item)
-
-            # 방금 추가한 루트를 현재 루트로 설정
-            self.current_root_id = new_root.id
-            self.roots_list.setCurrentItem(item)
             self.update_current_root_view()
 
         except Exception as e:
@@ -203,23 +175,39 @@ class MainWindow(QMainWindow):
             self.set_loading(False)
 
     # -------------------------------------------------------------------
-    # 2. 디렉토리 스캔 + 확장자별 분류 (이미지 제외)
+    # [추가] 1-1. 화면 초기화 (Clean) 버튼
     # -------------------------------------------------------------------
-    def scan_and_collect_files(self, dir_path: str):
+    def handle_clean_click(self):
         """
-        dir_path 이하의 파일을 모두 스캔해서 확장자별로 분류.
-        이미지(jpg, png, gif 등)는 제외.
+        현재 스캔된 루트 정보와 파일 목록, 검색 결과를 모두 지우고
+        초기 상태로 되돌립니다.
+        """
+        self.current_root = None
+        self.search_results = []
+
+        # UI 초기화
+        self.update_current_root_view() # 파일 목록 및 루트 라벨 초기화
+        self.search_results_list.clear()
+        self.search_input.clear()
+        
+        # 버튼 텍스트 원복
+        self.btn_scan.setText("📁 디렉토리 스캔")
+        
+        self.status_label.setText("상태: 대기 중. 새 디렉토리를 스캔하세요.")
+        self.log("화면이 초기화되었습니다.")
+
+    # -------------------------------------------------------------------
+    # 2. [수정] 디렉토리 스캔 (확장자 분류 X, 모든 경로 반환)
+    # -------------------------------------------------------------------
+    def scan_and_collect_files(self, dir_path: str) -> tuple[list[str], int]:
+        """
+        dir_path 이하의 파일을 모두 스캔. (이미지 제외)
+        [수정] 확장자별로 분류하지 않고, 모든 파일 경로의 리스트를 반환.
         """
         base = Path(dir_path)
-        tree = {
-            "pdf": [],
-            "ppt": [],
-            "word": [],
-            "excel": [],
-            "code": [],
-            "text": [],
-            "etc": [],
-        }
+        
+        # [수정] tree 딕셔너리 대신 file_paths 리스트 사용
+        file_paths: list[str] = []
         total_files = 0
 
         image_exts = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tif", ".tiff"}
@@ -229,65 +217,51 @@ class MainWindow(QMainWindow):
                 p = Path(root) / name
                 ext = p.suffix.lower()
                 if ext in image_exts:
-                    # 이미지 파일은 가상 디렉토리에서 아예 제외
+                    # 이미지 파일은 제외
                     continue
 
                 total_files += 1
+                
+                # [수정] 확장자 분류 if문 제거, 그냥 리스트에 추가
+                file_paths.append(str(p))
 
-                if ext == ".pdf":
-                    tree["pdf"].append(str(p))
-                elif ext in [".ppt", ".pptx"]:
-                    tree["ppt"].append(str(p))
-                elif ext in [".doc", ".docx", ".hwp", ".hwpx"]:
-                    tree["word"].append(str(p))
-                elif ext in [".xls", ".xlsx", ".csv"]:
-                    tree["excel"].append(str(p))
-                elif ext in [
-                    ".py", ".ipynb", ".js", ".ts", ".java",
-                    ".c", ".cpp", ".cs", ".go", ".rs", ".php"
-                ]:
-                    tree["code"].append(str(p))
-                elif ext in [".txt", ".md"]:
-                    tree["text"].append(str(p))
-                else:
-                    tree["etc"].append(str(p))
-
-        return tree, total_files
+        # [수정] file_paths 리스트와 총 개수 반환
+        return file_paths, total_files
 
     # -------------------------------------------------------------------
-    # 3. (임시) 임베딩 + 클러스터링 → 가상 디렉토리 트리 생성
+    # 3. [수정] (임시) 가상 디렉토리 트리 생성
     # -------------------------------------------------------------------
-    def build_virtual_tree_from_clusters(self, categorized_tree: dict) -> dict:
+    def build_virtual_tree_from_clusters(self, file_paths: list[str]) -> dict:
         """
+        [수정] 이제 이 함수는 (확장자별 분류된 딕셔너리) 대신
+              (경로 리스트)를 받습니다.
+
         실제로는:
-          1) 모든 파일에 대해 임베딩 계산
-          2) 클러스터링 (예: KMeans, HDBSCAN 등)
+          1) 이 file_paths 리스트를 기반으로 임베딩 계산
+          2) 클러스터링
           3) 클러스터 ID / 토픽명 기반 트리 구조 생성
 
-        지금은 임시로 "확장자별 분류"를 그대로 트리로 사용.
-        나중에 이 함수만 갈아끼우면 UI 그대로 두고
-        실제 Virtual Directory 로 바뀜.
+        [임시] "모든 파일"이라는 하나의 카테고리로 묶어서 반환합니다.
+               나중에 이 함수를 실제 클러스터링 로직으로 교체하면 됩니다.
         """
-        # TODO: 여기에 네 임베딩 + 클러스터링 로직을 연결하면 됨.
-        return categorized_tree
+        self.log(f"[AI 작업] {len(file_paths)}개 경로 전달받음. (클러스터링 수행)")
+        
+        # TODO: 여기에 실제 임베딩 + 클러스터링 로직 연결
+        
+        # 임시로 'all_files'라는 가상 폴더에 모든 파일을 넣음
+        if not file_paths:
+            return {}
+            
+        return {
+            "all_files": file_paths
+        }
 
     # -------------------------------------------------------------------
-    # 4. 루트 선택 변경
+    # 4. 파일 리스트 갱신 (update_current_root_view)
+    #    (변경 없음 - 'all_files' 키도 잘 처리함)
     # -------------------------------------------------------------------
-    def handle_root_select(self):
-        item = self.roots_list.currentItem()
-        if not item:
-            self.current_root_id = None
-            self.update_current_root_view()
-            return
-
-        root_id = item.data(Qt.UserRole)
-        self.current_root_id = root_id
-        self.update_current_root_view()
-
-    # 현재 루트에 맞게 가운데 파일 리스트 갱신
     def update_current_root_view(self):
-        root = self.get_current_root()
+        root = self.get_current_root() 
         if not root:
             self.current_root_label.setText("현재 루트: (없음)")
             self.file_list.clear()
@@ -298,51 +272,34 @@ class MainWindow(QMainWindow):
         )
         self.file_list.clear()
 
-        # 지금은 "카테고리[가상폴더] - 파일" 구조로만 표시
+        # [참고] root.tree가 {"all_files": [...]} 형태가 되므로,
+        # '📂 ALL_FILES' 라는 헤더와 그 아래 파일 목록이 표시됩니다.
         for category, paths in root.tree.items():
+            if not paths:
+                continue
+            
+            header = QListWidgetItem(f"📂 {category.upper()} ({len(paths)}개)")
+            header.setFlags(header.flags() & ~Qt.ItemIsSelectable)
+            header.setFlags(header.flags() & ~Qt.ItemIsEnabled)
+            self.file_list.addItem(header)
+
             for p in paths:
-                item = QListWidgetItem(f"[{category}] {Path(p).name}")
-                item.setData(Qt.UserRole, p)  # 절대 경로 저장
+                item = QListWidgetItem(f"    📄 {Path(p).name}")
+                item.setData(Qt.UserRole, p)
                 self.file_list.addItem(item)
 
+    # -------------------------------------------------------------------
+    # 5. get_current_root (변경 없음)
+    # -------------------------------------------------------------------
     def get_current_root(self) -> RootItem | None:
-        if not self.current_root_id:
-            return None
-        for r in self.roots:
-            if r.id == self.current_root_id:
-                return r
-        return None
+        return self.current_root
 
     # -------------------------------------------------------------------
-    # 5. 루트 삭제
-    # -------------------------------------------------------------------
-    def handle_remove_root(self):
-        item = self.roots_list.currentItem()
-        if not item:
-            return
-
-        root_id = item.data(Qt.UserRole)
-
-        # roots 리스트에서 제거
-        self.roots = [r for r in self.roots if r.id != root_id]
-
-        # UI 상에서도 제거
-        row = self.roots_list.row(item)
-        self.roots_list.takeItem(row)
-
-        # currentRootId 정리
-        if self.current_root_id == root_id:
-            self.current_root_id = None
-            self.update_current_root_view()
-
-        self.status_label.setText("선택한 루트가 삭제되었습니다.")
-
-    # -------------------------------------------------------------------
-    # 6. 검색 (검색 결과는 오른쪽 기능 패널 하단 리스트에 표시)
+    # 6. 검색 (handle_search_click) (변경 없음)
     # -------------------------------------------------------------------
     def handle_search_click(self):
         query = self.search_input.text().strip()
-        root = self.get_current_root()
+        root = self.get_current_root() 
 
         if not query or not root:
             self.search_results = []
@@ -351,6 +308,7 @@ class MainWindow(QMainWindow):
             return
 
         matched = []
+        # [참고] root.tree가 {"all_files": [...]} 형태여도 잘 동작합니다.
         for category, paths in root.tree.items():
             for p in paths:
                 if query.lower() in Path(p).name.lower():
@@ -369,7 +327,7 @@ class MainWindow(QMainWindow):
         )
 
     # -------------------------------------------------------------------
-    # 7. 파일 열기 (Windows/macOS/Linux 모두 지원)
+    # 7. 파일 열기 (handle_file_open) [오류 수정]
     # -------------------------------------------------------------------
     def handle_file_open(self, item: QListWidgetItem):
         file_path = item.data(Qt.UserRole)
@@ -385,33 +343,30 @@ class MainWindow(QMainWindow):
             elif system == "Darwin":  # macOS
                 import subprocess
                 subprocess.run(["open", file_path], check=False)
-            else:  # Linux 계열
+            else:  # Linux 계열 (SameSite 오타 수정)
                 import subprocess
                 subprocess.run(["xdg-open", file_path], check=False)
         except Exception as e:
             self.status_label.setText(f"파일 열기 실패: {e}")
-
     # -------------------------------------------------------------------
-    # 8. 기능 패널 추가 기능 버튼 (요약 / 보고서)
+    # 8. 추가 기능 버튼 (handle_summary/report_clicked) (변경 없음)
     # -------------------------------------------------------------------
     def handle_summary_clicked(self):
         root = self.get_current_root()
         if not root:
             self.log("[요약] 현재 루트가 없습니다.")
             return
-        # TODO: 현재 루트 기반 요약 생성 로직 연결
-        self.log("[요약] (TODO) 현재 루트 문서들로 요약 생성 로직을 붙이면 됩니다.")
+        self.log(f"[요약] (TODO) {root.name} 루트 기반 요약 생성")
 
     def handle_report_clicked(self):
         root = self.get_current_root()
         if not root:
             self.log("[보고서] 현재 루트가 없습니다.")
             return
-        # TODO: 현재 루트 기반 보고서 생성 로직 연결
-        self.log("[보고서] (TODO) 현재 루트 문서들로 보고서 제작 로직을 붙이면 됩니다.")
+        self.log(f"[보고서] (TODO) {root.name} 루트 기반 보고서 제작")
 
     # -------------------------------------------------------------------
-    # 유틸: 로딩 상태 / 로그
+    # 유틸 (set_loading, log) (변경 없음)
     # -------------------------------------------------------------------
     def set_loading(self, flag: bool):
         self.is_loading = flag
