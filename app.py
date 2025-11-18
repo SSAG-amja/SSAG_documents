@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
         search_layout = QVBoxLayout(search_group)
         
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("파일명 검색")
+        self.search_input.setPlaceholderText("키워드 검색")
         self.btn_search = QPushButton("검색")
         self.btn_search.clicked.connect(self.handle_search_click)
         self.search_results_list = QListWidget()
@@ -171,19 +171,14 @@ class MainWindow(QMainWindow):
         try:
             # 1. 파일 스캔 (절대 경로 리스트 획득)
             unique_files = self.scan_directory_unique(dir_path)
-            
-            # 2. 결과 출력 (터미널 확인용)
-            print(f"✅ 스캔 완료: {len(unique_files)}개 파일 (절대 경로)")
-            if unique_files:
-                print(f"   ㄴ 첫번째 파일 예시: {unique_files[0]}")
+            abs_path = os.path.abspath(dir_path)
+            self.current_root_label.setText(f"현재 루트: {abs_path}")
 
-            # 3. UI 업데이트 (버튼 크기 변경 없이 라벨만 업데이트)
             folder_name = Path(dir_path).name
             self.lbl_current_dir.setText(f"📂 {folder_name} ({len(unique_files)}개 파일)")
             self.status_bar.showMessage(f"스캔 완료: 총 {len(unique_files)}개 파일 대기 중")
-
+            
             # TODO: 나중에 여기서 process_files_and_save(unique_files) 호출
-            self.refresh_ui_from_db()
         except Exception as e:
             self.status_bar.showMessage(f"오류 발생: {e}")
             print(e)
@@ -335,7 +330,7 @@ class MainWindow(QMainWindow):
             # UI에 임시 결과 표시
             self.search_results_list.clear()
 
-            #이부분 반환되는 파일 올리면됨
+            # 이부분 반환되는 파일 올리면됨
             self.search_results_list.addItem(f"✅ 변환 성공 (길이: {vector_dim})")
             self.search_results_list.addItem(f"데이터: {query_vector[:5]}...")
 
