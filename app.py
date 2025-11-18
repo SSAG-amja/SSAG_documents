@@ -8,9 +8,9 @@ import time, random, string # uuid용
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
-    QVBoxLayout, QPushButton,
+    QHBoxLayout, QVBoxLayout, QPushButton,
     QLabel, QListWidget, QListWidgetItem,
-    QSplitter, QLineEdit,
+    QFileDialog, QSplitter, QLineEdit,
     QGroupBox, QTreeWidget, QTreeWidgetItem
 )
 from PySide6.QtCore import Qt
@@ -187,37 +187,68 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------------------------
     # 1. 디렉토리 스캔 버튼
     # -------------------------------------------------------------------
-    # [수정] handle_scan_click
+# [신규 추가] 파일명 기준 중복 제거 스캔 로직
+    def scan_directory_unique(self, dir_path: str) -> list[str]:
+        """
+        지정된 디렉토리를 하위까지 스캔하여 파일 경로 리스트를 반환합니다.
+        단, '파일명'이 같으면 중복으로 간주하고 최초 1개만 유지합니다.
+        """
+        file_paths = []
+        seen_filenames = set() # 중복 체크용 집합 (파일명만 저장)
+        
+        print(f"\n🚀 스캔 시작: {dir_path}")
+        print("-" * 50)
+
+        for root, dirs, files in os.walk(dir_path):
+            for name in files:
+                # 시스템 파일(.DS_Store 등)이나 숨김 파일 제외 (선택사항)
+                if name.startswith('.'):
+                    continue
+                
+                # [중복 제거 로직]
+                if name in seen_filenames:
+                    # 이미 리스트에 있는 파일명이면 건너뜀 (로그 출력)
+                    print(f"⚠️ [중복 제외] {name}")
+                    continue
+                
+                # 처음 보는 파일명이면 리스트에 추가
+                seen_filenames.add(name)
+                full_path = os.path.join(root, name)
+                file_paths.append(full_path)
+
+        print("-" * 50)
+        return file_paths
+
+    # [수정] 버튼 클릭 시: 폴더 선택 -> 스캔 -> 결과 프린트
     def handle_scan_click(self):
+        # 1. 폴더 선택 다이얼로그 띄우기
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "스캔할 폴더 선택", os.path.expanduser("~")
+        )
+        if not dir_path:
+            return
+
         self.set_loading(True)
-        self.status_label.setText("상태: DB 로드 중...")
+        self.status_label.setText(f"스캔 중: {dir_path}")
         
         try:
-            # 1. DB에서 트리 구조 가져오기
-            db_roots = load_virtual_tree_from_db()
+            # 2. 중복 제거된 파일 리스트 가져오기
+            unique_file_list = self.scan_directory_unique(dir_path)
             
-            if not db_roots:
-                self.status_label.setText("상태: DB에 데이터가 없습니다.")
-                self.set_loading(False)
-                return
+            # 3. [확인용] 터미널에 리스트 출력
+            print(f"\n✅ 최종 수집된 파일 리스트 ({len(unique_file_list)}개):")
+            print("=" * 50)
+            for path in unique_file_list:
+                print(path)
+            print("=" * 50)
 
-            # 2. RootItem 생성 (tree 필드에 db_roots 리스트 자체를 저장)
-            self.current_root = RootItem(
-                id="db_root",
-                name="AI Virtual Directory",
-                tree=db_roots,  # [중요] dict로 변환하지 않고 원본 리스트 저장
-                total_files=0   # 개수는 생략하거나 별도 계산
-            )
-
-            self.btn_scan.setText("📁 DB 로드 완료")
-            
-            # 3. 트리 화면 그리기 호출
-            self.update_tree_view(db_roots)
-            
-            self.status_label.setText("상태: 트리 로드 완료.")
+            # 4. UI 업데이트 (상태 표시)
+            self.status_label.setText(f"스캔 완료! 총 {len(unique_file_list)}개 파일 (중복 제거됨)")
+            self.btn_scan.setText(f"📁 {Path(dir_path).name} (스캔됨)")
+            self.log(f"스캔 완료. 터미널을 확인하세요.")
 
         except Exception as e:
-            self.status_label.setText(f"오류: {e}")
+            self.status_label.setText(f"오류 발생: {e}")
             print(e)
         finally:
             self.set_loading(False)
