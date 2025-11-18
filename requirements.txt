@@ -1,0 +1,13 @@
+PySide6
+mysql-connector-python
+python-dotenv
+numpy
+hdbscan
+scikit-learn
+openapi
+langchain
+bs4
+pandas
+#python -m venv venv
+#source venv/bin/activate
+#window : .\venv\Scripts\activate
