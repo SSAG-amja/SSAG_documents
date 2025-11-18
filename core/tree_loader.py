@@ -5,22 +5,19 @@ from typing import List, Dict, Optional
 
 from .db_mysql import get_connection
 
-
 @dataclass
 class FileEntry:
-    id: int
+    doc_id: str
     name: str
     path: str
 
-
 @dataclass
 class CategoryNode:
-    id: int
-    name: str
+    id: int             # category_id
+    name: str           # category_name
     parent_id: Optional[int]
     children: List["CategoryNode"] = field(default_factory=list)
     files: List[FileEntry] = field(default_factory=list)
-
 
 def load_virtual_tree_from_db() -> List[CategoryNode]:
     """
@@ -30,15 +27,16 @@ def load_virtual_tree_from_db() -> List[CategoryNode]:
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 1) category 모두 읽기
-    cursor.execute("SELECT id, name, parent_id FROM category")
+    # 1) category 테이블 읽기
+    # 스키마: category_id, category_name, parent_id
+    cursor.execute("SELECT category_id, category_name, parent_id FROM category")
     rows = cursor.fetchall()
 
     nodes: Dict[int, CategoryNode] = {}
-    for cid, name, parent_id in rows:
-        nodes[cid] = CategoryNode(
-            id=cid,
-            name=name,
+    for cat_id, cat_name, parent_id in rows:
+        nodes[cat_id] = CategoryNode(
+            id=cat_id,
+            name=cat_name,
             parent_id=parent_id,
         )
 
@@ -52,20 +50,21 @@ def load_virtual_tree_from_db() -> List[CategoryNode]:
             if parent:
                 parent.children.append(node)
             else:
-                # parent_id가 있는데 부모가 없으면 그냥 루트로 취급 (예외 케이스)
                 roots.append(node)
 
-    # 3) file 테이블 읽어서 각 카테고리에 붙이기
-    cursor.execute("SELECT id, file_name, file_path, category_id FROM file")
+    # 3) file 테이블 읽어서 붙이기
+    # 스키마: doc_id, file_name, original_path, category_id
+    cursor.execute("SELECT doc_id, file_name, original_path, category_id FROM file")
     file_rows = cursor.fetchall()
 
-    for fid, fname, fpath, category_id in file_rows:
+    for doc_id, fname, fpath, category_id in file_rows:
         cat_node = nodes.get(category_id)
         if not cat_node:
             continue
+        
         cat_node.files.append(
             FileEntry(
-                id=fid,
+                doc_id=doc_id,
                 name=fname,
                 path=fpath,
             )
@@ -74,7 +73,7 @@ def load_virtual_tree_from_db() -> List[CategoryNode]:
     cursor.close()
     conn.close()
 
-    # 자식 카테고리/파일 정렬(보기 좋게)
+    # 4) 정렬 (이름순)
     def sort_tree(node: CategoryNode):
         node.children.sort(key=lambda c: c.name.lower())
         node.files.sort(key=lambda f: f.name.lower())

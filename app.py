@@ -8,12 +8,14 @@ import time, random, string # uuid용
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget,
-    QHBoxLayout, QVBoxLayout, QPushButton,
+    QVBoxLayout, QPushButton,
     QLabel, QListWidget, QListWidgetItem,
-    QFileDialog, QSplitter, QLineEdit,
-    QGroupBox
+    QSplitter, QLineEdit,
+    QGroupBox, QTreeWidget, QTreeWidgetItem
 )
 from PySide6.QtCore import Qt
+from core.db_mysql import get_connection, clear_all_data  # clear_all_data 추가
+from core.tree_loader import load_virtual_tree_from_db
 
 
 # -------------------------------------------------------------------
@@ -110,8 +112,8 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(extra_group)
 
 
-        # ---------------------------
-        # [오른쪽] 파일 리스트
+       # ---------------------------
+        # [오른쪽] 파일 리스트 -> 트리 위젯으로 변경
         # ---------------------------
         right_panel_widget = QWidget()
         right_layout = QVBoxLayout(right_panel_widget)
@@ -119,10 +121,11 @@ class MainWindow(QMainWindow):
         self.current_root_label = QLabel("현재 루트: (없음)")
         right_layout.addWidget(self.current_root_label)
 
-        self.file_list = QListWidget()
-        self.file_list.itemDoubleClicked.connect(self.handle_file_open)
-        right_layout.addWidget(self.file_list, stretch=1)
-
+        # [수정] QListWidget -> QTreeWidget
+        self.file_tree = QTreeWidget()
+        self.file_tree.setHeaderLabel("가상 디렉토리 구조") # 헤더 이름 설정
+        self.file_tree.itemDoubleClicked.connect(self.handle_file_open) # 더블클릭 연결
+        right_layout.addWidget(self.file_tree, stretch=1)
         # ---------------------------
         # splitter 설정 (변경 없음)
         # ---------------------------
@@ -135,66 +138,120 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(splitter, stretch=1)
         self.setCentralWidget(central)
 
+        # [신규 추가] DB 트리 객체를 GUI용 딕셔너리로 변환
+    def convert_nodes_to_dict(self, nodes) -> dict:
+        result = {}
+        
+        # 재귀적으로 트리를 순회하며 "카테고리 -> 파일리스트" 형태로 만듭니다.
+        def traverse(node, path_prefix=""):
+            # 현재 카테고리 이름 (깊이가 있으면 "부모 > 자식" 형태로 표시)
+            current_name = f"{path_prefix} > {node.name}" if path_prefix else node.name
+            
+            # 이 카테고리에 파일이 있으면 결과에 추가
+            if node.files:
+                # GUI는 파일 경로 문자열의 리스트를 원함
+                file_paths = [f.path for f in node.files]
+                result[current_name] = file_paths
+            
+            # 자식 카테고리들도 탐색
+            for child in node.children:
+                traverse(child, current_name)
+
+        for root in nodes:
+            traverse(root)
+            
+        return result
+    
+        # [신규 추가] 트리 위젯에 노드를 재귀적으로 추가하는 함수
+    def populate_tree(self, parent_widget, category_node):
+        """
+        parent_widget: QTreeWidget 또는 QTreeWidgetItem
+        category_node: CategoryNode 객체 (DB에서 가져온 것)
+        """
+        # 1. 현재 카테고리(폴더) 아이템 생성
+        folder_item = QTreeWidgetItem(parent_widget)
+        folder_item.setText(0, f"📂 {category_node.name}")
+        folder_item.setExpanded(True) # 기본적으로 펼쳐두기 (싫으면 False)
+        
+        # 2. 해당 카테고리 안의 파일들 추가
+        for file_entry in category_node.files:
+            file_item = QTreeWidgetItem(folder_item)
+            file_item.setText(0, f"📄 {file_entry.name}")
+            # 파일 경로는 숨겨진 데이터로 저장 (더블클릭 시 열기 위함)
+            file_item.setData(0, Qt.UserRole, file_entry.path)
+
+        # 3. 자식 카테고리(하위 폴더)가 있으면 재귀 호출
+        for child_node in category_node.children:
+            self.populate_tree(folder_item, child_node)
+
     # -------------------------------------------------------------------
     # 1. 디렉토리 스캔 버튼
     # -------------------------------------------------------------------
+    # [수정] handle_scan_click
     def handle_scan_click(self):
-        dir_path = QFileDialog.getExistingDirectory(
-            self, "스캔할 폴더 선택", os.path.expanduser("~")
-        )
-        if not dir_path:
-            return
-
         self.set_loading(True)
-        root_name = Path(dir_path).name
-
+        self.status_label.setText("상태: DB 로드 중...")
+        
         try:
-            # [수정] 확장자 분류(categorized_tree) 대신 파일 경로 리스트(file_paths)를 받음
-            file_paths, total_files = self.scan_and_collect_files(dir_path)
-
-            # [수정] file_paths 리스트를 클러스터링 함수로 전달
-            # (이 함수가 나중에 AI 작업을 수행하고 가상 트리를 반환할 부분)
-            virtual_tree = self.build_virtual_tree_from_clusters(file_paths)
-
-            self.current_root = RootItem(
-                id=uuid(),
-                name=root_name,
-                tree=virtual_tree,
-                total_files=total_files,
-            )
+            # 1. DB에서 트리 구조 가져오기
+            db_roots = load_virtual_tree_from_db()
             
-            # [수정] 버튼 비활성화 로직 *삭제* -> 계속 활성화됨
-            self.btn_scan.setText(f"📁 {root_name} (스캔됨)")
+            if not db_roots:
+                self.status_label.setText("상태: DB에 데이터가 없습니다.")
+                self.set_loading(False)
+                return
 
-            self.update_current_root_view()
+            # 2. RootItem 생성 (tree 필드에 db_roots 리스트 자체를 저장)
+            self.current_root = RootItem(
+                id="db_root",
+                name="AI Virtual Directory",
+                tree=db_roots,  # [중요] dict로 변환하지 않고 원본 리스트 저장
+                total_files=0   # 개수는 생략하거나 별도 계산
+            )
+
+            self.btn_scan.setText("📁 DB 로드 완료")
+            
+            # 3. 트리 화면 그리기 호출
+            self.update_tree_view(db_roots)
+            
+            self.status_label.setText("상태: 트리 로드 완료.")
 
         except Exception as e:
-            self.status_label.setText(f"스캔 실패: {e}")
-            print("스캔 실패:", e)
+            self.status_label.setText(f"오류: {e}")
+            print(e)
         finally:
             self.set_loading(False)
-
     # -------------------------------------------------------------------
     # [추가] 1-1. 화면 초기화 (Clean) 버튼
     # -------------------------------------------------------------------
+    # [수정] 화면 초기화 및 DB 삭제 기능
     def handle_clean_click(self):
         """
-        현재 스캔된 루트 정보와 파일 목록, 검색 결과를 모두 지우고
-        초기 상태로 되돌립니다.
+        DB 데이터를 모두 지우고, 화면도 초기화합니다.
         """
+        # 1. DB 삭제 수행
+        try:
+            conn = get_connection()
+            clear_all_data(conn) # DB 싹 지우기
+            conn.close()
+        except Exception as e:
+            self.status_label.setText(f"DB 삭제 실패: {e}")
+            return
+
+        # 2. 내부 데이터 초기화
         self.current_root = None
         self.search_results = []
 
-        # UI 초기화
-        self.update_current_root_view() # 파일 목록 및 루트 라벨 초기화
-        self.search_results_list.clear()
+        # 3. UI 컴포넌트 초기화
+        self.file_tree.clear()           # [중요] 트리 위젯 비우기
+        self.search_results_list.clear() # 검색 결과 비우기
         self.search_input.clear()
+        self.current_root_label.setText("현재 루트: (없음)")
         
-        # 버튼 텍스트 원복
-        self.btn_scan.setText("📁 디렉토리 스캔")
-        
-        self.status_label.setText("상태: 대기 중. 새 디렉토리를 스캔하세요.")
-        self.log("화면이 초기화되었습니다.")
+        # 4. 버튼 및 상태 메시지 원복
+        self.btn_scan.setText("📁 DB 로드 (새로고침)")
+        self.status_label.setText("상태: 초기화 완료. DB가 비워졌습니다.")
+        self.log("화면 및 DB가 초기화되었습니다.")
 
     # -------------------------------------------------------------------
     # 2. [수정] 디렉토리 스캔 (확장자 분류 X, 모든 경로 반환)
@@ -260,34 +317,15 @@ class MainWindow(QMainWindow):
     # 4. 파일 리스트 갱신 (update_current_root_view)
     #    (변경 없음 - 'all_files' 키도 잘 처리함)
     # -------------------------------------------------------------------
-    def update_current_root_view(self):
-        root = self.get_current_root() 
-        if not root:
-            self.current_root_label.setText("현재 루트: (없음)")
-            self.file_list.clear()
-            return
-
-        self.current_root_label.setText(
-            f"현재 루트: {root.name} (총 {root.total_files}개 파일)"
-        )
-        self.file_list.clear()
-
-        # [참고] root.tree가 {"all_files": [...]} 형태가 되므로,
-        # '📂 ALL_FILES' 라는 헤더와 그 아래 파일 목록이 표시됩니다.
-        for category, paths in root.tree.items():
-            if not paths:
-                continue
-            
-            header = QListWidgetItem(f"📂 {category.upper()} ({len(paths)}개)")
-            header.setFlags(header.flags() & ~Qt.ItemIsSelectable)
-            header.setFlags(header.flags() & ~Qt.ItemIsEnabled)
-            self.file_list.addItem(header)
-
-            for p in paths:
-                item = QListWidgetItem(f"    📄 {Path(p).name}")
-                item.setData(Qt.UserRole, p)
-                self.file_list.addItem(item)
-
+    # [신규 추가] 실제 트리를 화면에 그리는 함수
+    def update_tree_view(self, root_nodes):
+        self.file_tree.clear() # 기존 목록 지우기
+        
+        for node in root_nodes:
+            # populate_tree 함수를 호출하여 재귀적으로 그리기
+            self.populate_tree(self.file_tree, node)
+                
+    
     # -------------------------------------------------------------------
     # 5. get_current_root (변경 없음)
     # -------------------------------------------------------------------
@@ -329,25 +367,33 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------------------------
     # 7. 파일 열기 (handle_file_open) [오류 수정]
     # -------------------------------------------------------------------
-    def handle_file_open(self, item: QListWidgetItem):
-        file_path = item.data(Qt.UserRole)
+    # [수정] 파일 열기 핸들러
+    def handle_file_open(self, item: QTreeWidgetItem, column: int):
+        # 저장해둔 파일 경로 가져오기
+        file_path = item.data(0, Qt.UserRole)
+        
+        # 파일 경로가 없으면(폴더를 클릭한 경우) 무시하거나 펼치기/접기 토글
         if not file_path:
+            # (선택 사항) 폴더 더블클릭 시 펼치기/접기
+            item.setExpanded(not item.isExpanded())
             return
 
         self.status_label.setText(f"파일 열기: {file_path}")
 
+        # 기존 파일 열기 로직 그대로 사용
         try:
             system = platform.system()
             if system == "Windows":
                 os.startfile(file_path)
-            elif system == "Darwin":  # macOS
+            elif system == "Darwin":
                 import subprocess
                 subprocess.run(["open", file_path], check=False)
-            else:  # Linux 계열 (SameSite 오타 수정)
+            else:
                 import subprocess
                 subprocess.run(["xdg-open", file_path], check=False)
         except Exception as e:
-            self.status_label.setText(f"파일 열기 실패: {e}")
+            self.status_label.setText(f"파일 열기 실패: {e}")    
+    
     # -------------------------------------------------------------------
     # 8. 추가 기능 버튼 (handle_summary/report_clicked) (변경 없음)
     # -------------------------------------------------------------------
