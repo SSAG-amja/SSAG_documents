@@ -17,8 +17,9 @@ from core.db_mysql import get_connection, clear_all_data
 from core.tree_loader import load_virtual_tree_from_db
 
 from openai import OpenAI
-from core.config import UPSTAGE_API_KEY
-
+from core.backend.centralLogic.pipeline import run_pipeline
+from core.backend.setting.qdrantCollectionSet import create_qdrant_collection
+from core.config import SOLAR_API_KEY
 # -------------------------------------------------------------------
 # 데이터 클래스
 # -------------------------------------------------------------------
@@ -156,7 +157,7 @@ class MainWindow(QMainWindow):
                 
                 # [중요] 경로 결합 후 절대 경로로 변환하여 저장
                 full_path = os.path.join(root, name)
-                abs_path = os.path.abspath(full_path) 
+                abs_path =  os.path.abspath(full_path) 
                 
                 file_paths.append(abs_path)
                 
@@ -179,6 +180,8 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"스캔 완료: 총 {len(unique_files)}개 파일 대기 중")
             
             # TODO: 나중에 여기서 process_files_and_save(unique_files) 호출
+            create_qdrant_collection()
+            run_pipeline(unique_files)
         except Exception as e:
             self.status_bar.showMessage(f"오류 발생: {e}")
             print(e)
@@ -205,6 +208,7 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("초기화 완료. DB 및 화면이 정리되었습니다.")
             
             print("🧹 화면 및 DB 초기화 완료.")
+            
             
         except Exception as e:
             print(f"초기화 실패: {e}")
@@ -301,7 +305,7 @@ class MainWindow(QMainWindow):
             # (A) Solar (Upstage) API로 텍스트 -> 벡터 변환
             # -------------------------------------------------------
             client = OpenAI(
-                api_key=UPSTAGE_API_KEY,
+                api_key=SOLAR_API_KEY,
                 base_url="https://api.upstage.ai/v1"
             )
             
@@ -324,8 +328,6 @@ class MainWindow(QMainWindow):
             
             # [TODO] 나중에 Qdrant 담당자가 구현할 함수에 이 query_vector를 넘기면 됨
             # 예: qdrant_module.search(query_vector)
-            
-            self.status_bar.showMessage(f"임베딩 성공! (차원: {vector_dim}) - 터미널 확인")
             
             # UI에 임시 결과 표시
             self.search_results_list.clear()

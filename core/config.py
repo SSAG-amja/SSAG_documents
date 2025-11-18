@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ---------- Upstage ----------
-UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
+SOLAR_API_KEY = os.getenv("SOLAR_API_KEY")
 
 # Upstage Embedding 엔드포인트 & 모델
 UPSTAGE_EMBEDDING_URL = "https://api.upstage.ai/v1/embeddings"
@@ -16,6 +16,11 @@ UPSTAGE_EMBEDDING_MODEL = "solar-embedding-1-large-passage"
 QDRANT_HOST = os.getenv("QDRANT_HOST")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "ssag_documents")
+QDRANT_URL = os.getenv("QDRANT_URL") 
+COLLECTION_NAME = os.getenv("COLLECTION_NAME") 
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") 
+
+
 
 # ---------- MySQL ----------
 MYSQL_HOST = os.getenv("MYSQL_HOST")
