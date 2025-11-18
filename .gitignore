@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.swp
+*.log
+
+# 가상환경
+.venv/
+venv/
+env/
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# OS 별 잡파일
+.DS_Store
+Thumbs.db
+
+# 환경변수 / 민감 정보
+.env
+.env.*
+!.env.example
