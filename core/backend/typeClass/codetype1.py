@@ -9,8 +9,8 @@ import re
 from langchain_text_splitters import RecursiveCharacterTextSplitter, Language
 import sys 
 import requests # <--- 추가: LLM 호출을 위해 requests 모듈 추가
-from core.config import SOLAR_API_KEY
 
+from core.config import SOLAR_API_KEY
 # -----------------------------
 # 1. 설정 (LLM API 설정 추가)
 # -----------------------------

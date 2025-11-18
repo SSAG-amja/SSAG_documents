@@ -2,7 +2,6 @@
 
 import sys
 from pathlib import Path
-from core.config import QDRANT_API_KEY, QDRANT_URL, MYSQL_DB, MYSQL_HOST, MYSQL_PASSWORD, MYSQL_PORT, MYSQL_USER
 
 print("=== Python & pip 확인 ===")
 print("Python 버전:", sys.version)
@@ -41,10 +40,10 @@ print("\n=== MySQL 연결 테스트 ===")
 try:
     import mysql.connector
     conn = mysql.connector.connect(
-        host=MYSQL_HOST,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DB
+        host="localhost",
+        user="ssag_user",
+        password="Ssag1234!",
+        database="info"
     )
     cursor = conn.cursor()
     cursor.execute("SHOW TABLES;")
@@ -58,8 +57,8 @@ print("\n=== Qdrant 연결 테스트 ===")
 try:
     from qdrant_client import QdrantClient
     client = QdrantClient(
-        url=QDRANT_URL,
-        api_key=QDRANT_API_KEY  # 실제 API 키로 변경
+        url="http://localhost:6333",
+        api_key="Ssag1234SECRET"  # 실제 API 키로 변경
     )
     collections = client.get_collections()
     print("Qdrant 연결 성공, 컬렉션:", collections)

@@ -6,16 +6,18 @@ from qdrant_client.http.models import Distance
 from tqdm import tqdm
 import sys 
 
+from core.config import SOLAR_API_KEY, COLLECTION_NAME, QDRANT_API_KEY, QDRANT_URL
+
 # -----------------------------
 # 1. 설정 및 상수
 # -----------------------------
-
-from core.config import QDRANT_URL, COLLECTION_NAME, QDRANT_API_KEY, SOLAR_API_KEY
 
 # Upstage API 설정
 UPSTAGE_EMBEDDING_ENDPOINT = "https://api.upstage.ai/v1/embeddings"
 EMBEDDING_MODEL = "embedding-passage"
 BATCH_SIZE = 100 
+
+
 VECTOR_DIMENSION = 4096 # Upstage Embeddings 모델 차원
 
 # -----------------------------

@@ -17,9 +17,22 @@ from core.db_mysql import get_connection, clear_all_data
 from core.tree_loader import load_virtual_tree_from_db
 
 from openai import OpenAI
-from core.backend.centralLogic.pipeline import run_pipeline
+from core.backend.centralLogic.pipline import run_pipeline
 from core.backend.setting.qdrantCollectionSet import create_qdrant_collection
-from core.config import SOLAR_API_KEY
+from core.backend.setting.mysqlSet import create_tables
+from core.backend.clustering.runClustering import run_workflow
+from core.backend.clustering.inputMysql import category
+from core.config import SOLAR_API_KEY, MYSQL_DB, MYSQL_HOST, MYSQL_PASSWORD, MYSQL_USER
+
+
+
+DB_CONFIG = {
+    "user": MYSQL_USER,          # MySQL 사용자 이름으로 변경
+    "password": MYSQL_PASSWORD,  # MySQL 비밀번호로 변경
+    "host": MYSQL_HOST,
+    "database": MYSQL_DB    # 사용할 데이터베이스 이름으로 변경
+}
+
 # -------------------------------------------------------------------
 # 데이터 클래스
 # -------------------------------------------------------------------
@@ -179,9 +192,15 @@ class MainWindow(QMainWindow):
             self.lbl_current_dir.setText(f"📂 {folder_name} ({len(unique_files)}개 파일)")
             self.status_bar.showMessage(f"스캔 완료: 총 {len(unique_files)}개 파일 대기 중")
             
+            print(unique_files)
             # TODO: 나중에 여기서 process_files_and_save(unique_files) 호출
+            create_tables(DB_CONFIG)
             create_qdrant_collection()
             run_pipeline(unique_files)
+            run_workflow()
+            category()
+            self.refresh_ui_from_db()
+
         except Exception as e:
             self.status_bar.showMessage(f"오류 발생: {e}")
             print(e)

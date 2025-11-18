@@ -4,11 +4,11 @@ import os
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import Distance, VectorParams
 
-# -----------------------------
-# 1. 설정
-# -----------------------------
+from core.config import QDRANT_URL, COLLECTION_NAME, QDRANT_API_KEY
 
-from core.config import QDRANT_URL, QDRANT_API_KEY, COLLECTION_NAME
+
+
+# Upstage Solar Embedding 모델 설정
 VECTOR_DIMENSION = 4096 # Upstage Embeddings 모델의 차원 수
 VECTOR_DISTANCE = Distance.COSINE # 코사인 유사도 사용
 
@@ -42,3 +42,9 @@ def create_qdrant_collection():
     except Exception as e:
         print(f"\n❌ [Qdrant Error] 컬렉션 생성 실패. Qdrant 서버가 실행 중인지 확인하십시오.")
         print(f"   오류 내용: {e}")
+        
+# -----------------------------
+# 3. 실행
+# -----------------------------
+if __name__ == "__main__":
+    create_qdrant_collection()

@@ -12,6 +12,7 @@ from io import StringIO
 from collections import defaultdict
 import sys 
 from core.config import SOLAR_API_KEY
+
 # -----------------------------
 # 1. 설정 (기존 유지)
 # -----------------------------
@@ -28,8 +29,7 @@ except IndexError:
 base_name = os.path.basename(file_path)
 file_name_prefix = os.path.splitext(base_name)[0]
 
-# API 키 및 LLM 설정
-# NOTE: Solar LLM API 키를 사용해야 합니다.
+
 SOLAR_LLM_ENDPOINT = "https://api.upstage.ai/v1/chat/completions"
 SOLAR_LLM_HEADERS = {
     "Authorization": f"Bearer {SOLAR_API_KEY}",

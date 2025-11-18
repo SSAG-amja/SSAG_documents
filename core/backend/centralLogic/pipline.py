@@ -28,7 +28,6 @@ FILE_TYPE_MAP = {
     ('.xlsx', '.xls', '.csv'): TABLETYPE1_SCRIPT
 }
 
-
 def get_processor_script(file_path):
     """파일 확장자를 기반으로 적절한 전처리 스크립트를 반환합니다."""
     ext = os.path.splitext(file_path)[1].lower()
@@ -174,3 +173,4 @@ def run_pipeline(file_paths):
         print(f"- {file}: **{status['status']}** - {status['message']}", file=sys.stderr)
         
     return overall_status
+
