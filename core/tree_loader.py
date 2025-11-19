@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 
-from .db_mysql import get_connection
+from core.backend.setting.mysqlSet import get_connection
 
 @dataclass
 class FileEntry:

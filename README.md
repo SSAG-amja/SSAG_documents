@@ -43,6 +43,12 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+6. qdrant 시ㄹ행
+- 도커 실행 후 
+```
+docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
+```
+
 5. 실행
 ```
 python app.py

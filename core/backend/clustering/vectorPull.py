@@ -5,6 +5,9 @@ import sys
 import pandas as pd
 from qdrant_client import QdrantClient
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, "../../../")) # SSAG_documents 경로
+sys.path.append(project_root)
 from core.config import QDRANT_URL,COLLECTION_NAME, QDRANT_API_KEY
 
 

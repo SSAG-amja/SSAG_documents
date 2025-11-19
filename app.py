@@ -13,13 +13,12 @@ from PySide6.QtWidgets import (
     QSplitter, QLineEdit, QGroupBox, QTreeWidget, QTreeWidgetItem
 )
 from PySide6.QtCore import Qt
-from core.db_mysql import get_connection, clear_all_data
 from core.tree_loader import load_virtual_tree_from_db
 
 from openai import OpenAI
 from core.backend.centralLogic.pipline import run_pipeline
 from core.backend.setting.qdrantCollectionSet import create_qdrant_collection
-from core.backend.setting.mysqlSet import create_tables
+from core.backend.setting.mysqlSet import get_connection, clear_all_data, create_tables
 from core.backend.clustering.runClustering import run_workflow
 from core.backend.clustering.inputMysql import category
 from core.config import SOLAR_API_KEY, MYSQL_DB, MYSQL_HOST, MYSQL_PASSWORD, MYSQL_USER
@@ -193,8 +192,8 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"스캔 완료: 총 {len(unique_files)}개 파일 대기 중")
             
             print(unique_files)
-            # TODO: 나중에 여기서 process_files_and_save(unique_files) 호출
-            create_tables(DB_CONFIG)
+            
+            create_tables()
             create_qdrant_collection()
             run_pipeline(unique_files)
             run_workflow()
@@ -211,9 +210,7 @@ class MainWindow(QMainWindow):
     def handle_clean_click(self):
         try:
             # DB 삭제
-            conn = get_connection()
-            clear_all_data(conn)
-            conn.close()
+            clear_all_data()
             
             # UI 초기화
             self.file_tree.clear()

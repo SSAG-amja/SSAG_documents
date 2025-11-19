@@ -1,12 +1,10 @@
-import numpy as np
 import json
 import os
 import sys
 import requests
 import re
-from typing import List, Dict, Any, Set, Tuple
 
-from core.config import QDRANT_API_KEY, SOLAR_API_KEY
+from core.config import SOLAR_API_KEY
 
 # --- Qdrant 및 Solar LLM 설정 ---
 # NOTE: Qdrant는 이 단계에서 사용되지 않지만, API 키 설정을 유지합니다. 
